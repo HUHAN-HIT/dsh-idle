@@ -1,0 +1,5 @@
+# dsh-idle bundle layer: registers the idle-task scheduler plugin. No configuration required;
+# the scheduler stores task records under ~/.dsh/plugins-data/dsh-idle.
+- insert:
+    - id: dsh-idle
+      name: '@baymaxhit/dsh-idle'
