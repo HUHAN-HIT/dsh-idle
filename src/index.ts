@@ -76,7 +76,7 @@ export function apply(ctx: DshCtx): void {
     json(res, 404, { error: 'unknown operation' })
   }
 
-  ctx.effect(() => {
+  ctx.effect?.(() => {
     console.log('[dsh-idle] registering /idle routes')
     ctx.webServer.register({ kind: 'prefix', path: '/idle', handler })
   }, 'dsh-idle: routes')
