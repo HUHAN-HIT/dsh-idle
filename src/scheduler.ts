@@ -194,7 +194,9 @@ export class IdleScheduler {
       const handle = await this.host.agents.create({
         sessionId,
         cwd: process.cwd(),
-        meta: { origin: 'idle-task', task: task.id, title: task.title },
+        // The harness core validates the session header and only accepts origin "subagent" for
+        // sessions created through the agents registry (mesh's dispatcher carries the same marker).
+        meta: { origin: 'subagent', idleTask: task.id, title: task.title },
       })
       const live: { taskId: string; startedAt: number; timer?: ReturnType<typeof setTimeout>; offs: (() => void)[] } = { taskId: task.id, startedAt: now, offs: [] }
       this.sessions.set(sessionId, live)
