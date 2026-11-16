@@ -12,7 +12,7 @@ interface DshCtx {
   }
   /** Subscribes to host-wide agent events; optional so the plugin degrades gracefully without it. */
   on?(event: string, handler: (payload: unknown) => void): () => void
-  effect?(fn: () => void): void
+  effect?(fn: () => void, name?: string): void
 }
 
 export const name = 'dsh-idle'
