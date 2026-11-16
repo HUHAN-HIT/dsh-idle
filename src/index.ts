@@ -42,6 +42,7 @@ function json(res: unknown, status: number, body: unknown): void {
 }
 
 export function apply(ctx: DshCtx): void {
+  console.log(`[dsh-idle] apply: webServer=${String(ctx.webServer !== undefined)} agents=${String(ctx.agents !== undefined)} effect=${String(typeof ctx.effect === 'function')} on=${String(typeof ctx.on === 'function')}`)
   const scheduler = new IdleScheduler({
     agents: ctx.agents,
     onAgentEvent: handler => ctx.on ? ctx.on('agent/status', (payload: unknown) => handler(payload as { agent?: { id?: string } })) : () => {},
@@ -75,5 +76,9 @@ export function apply(ctx: DshCtx): void {
     json(res, 404, { error: 'unknown operation' })
   }
 
-  ctx.effect?.(() => ctx.webServer.register({ kind: 'prefix', path: '/idle', handler }))
+  ctx.effect(() => {
+    console.log('[dsh-idle] registering /idle routes')
+    ctx.webServer.register({ kind: 'prefix', path: '/idle', handler })
+  }, 'dsh-idle: routes')
+  console.log('[dsh-idle] apply done')
 }
