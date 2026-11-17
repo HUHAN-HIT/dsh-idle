@@ -45,7 +45,10 @@ export function apply(ctx: DshCtx): void {
   console.log(`[dsh-idle] apply: webServer=${String(ctx.webServer !== undefined)} agents=${String(ctx.agents !== undefined)} effect=${String(typeof ctx.effect === 'function')} on=${String(typeof ctx.on === 'function')}`)
   const scheduler = new IdleScheduler({
     agents: ctx.agents,
-    onAgentEvent: handler => ctx.on ? ctx.on('agent/status', (payload: unknown) => handler(payload as { agent?: { id?: string } })) : () => {},
+    onAgentEvent: (handler: (payload: { agent?: { id?: string }; status?: string; error?: unknown }, event: 'agent/status' | 'agent/error') => void, event?: 'agent/status' | 'agent/error') => {
+      if (!ctx.on) return () => {}
+      return ctx.on(event ?? 'agent/status', (payload: unknown) => handler(payload as { agent?: { id?: string } }, event ?? 'agent/status'))
+    },
     dataDir: join(homedir(), '.dsh', 'plugins-data', 'dsh-idle'),
     config: readConfig,
   })

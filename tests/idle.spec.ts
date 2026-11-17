@@ -31,9 +31,13 @@ function host(config: Partial<IdleTaskConfig> = {}, dataDir = fs.mkdtempSync(pat
   const scheduler = new IdleScheduler({
     agents: agents as never,
     now: () => clock,
-    onAgentEvent: cb => {
-      (ctxHandlers.get('agent/status') ?? ctxHandlers.set('agent/status', new Set()).get('agent/status')!).add(cb as never)
-      return () => ctxHandlers.get('agent/status')?.delete(cb as never)
+    onAgentEvent: (cb: (payload: { agent?: { id?: string }; status?: string; error?: unknown }, event: 'agent/status' | 'agent/error') => void) => {
+      const add = (event: 'agent/status' | 'agent/error'): (() => void) => {
+        (ctxHandlers.get(event) ?? ctxHandlers.set(event, new Set()).get(event)!).add((p: unknown) => cb(p as { agent?: { id?: string } }, event))
+        return () => ctxHandlers.get(event)?.delete(cb as unknown as (p: unknown) => void)
+      }
+      const off1 = add('agent/status'); const off2 = add('agent/error')
+      return () => { off1(); off2() }
     },
     dataDir,
     config: () => fullConfig,
@@ -42,9 +46,9 @@ function host(config: Partial<IdleTaskConfig> = {}, dataDir = fs.mkdtempSync(pat
   const personAct = (at = clock): void => { clock = at; for (const cb of ctxHandlers.get('agent/status') ?? []) cb({ agent: { id: 'person-session' } }) }
   const advanceTo = (at: number): void => { clock = at }
   const tick = (): void => scheduler.tick(clock)
-  /** The dispatched idle session's own status stream goes idle (the model finished its goal). */
-  const finish = (sessionId: string): void => { for (const cb of listeners.get(`${sessionId}:agent/status`) ?? []) cb({ status: 'idle' }) }
-  const fail = (sessionId: string, message: string): void => { for (const cb of listeners.get(`${sessionId}:agent/error`) ?? []) cb({ error: message }) }
+  /** The dispatched idle session finishes: host-wide status event with its id. */
+  const finish = (sessionId: string): void => { for (const cb of ctxHandlers.get('agent/status') ?? []) cb({ agent: { id: sessionId }, status: 'idle' }) }
+  const fail = (sessionId: string, message: string): void => { for (const cb of ctxHandlers.get('agent/error') ?? []) cb({ agent: { id: sessionId }, error: message }) }
   return { scheduler, agents, created, personAct, advanceTo, tick, finish, fail, dataDir, config: fullConfig }
 }
 

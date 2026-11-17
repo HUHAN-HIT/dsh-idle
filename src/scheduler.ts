@@ -68,8 +68,8 @@ export interface IdleTask {
 
 export interface IdleSchedulerHost {
   readonly agents: AgentsRegistry
-  /** Subscribes to host-wide agent events (`agent/status`, `agent/error`) for person-activity detection. */
-  readonly onAgentEvent: (handler: (payload: { agent?: { id?: string } }) => void) => () => void
+  /** Subscribes to host-wide agent events (`agent/status`, `agent/error`) for person-activity and lifecycle detection. */
+  readonly onAgentEvent: (handler: (payload: { agent?: { id?: string }; status?: string; error?: unknown }, event: 'agent/status' | 'agent/error') => void) => () => void
   readonly dataDir: string
   readonly config: () => IdleTaskConfig
   /** Injectable clock, so tests can drive quiet windows deterministically. */
@@ -92,10 +92,33 @@ export class IdleScheduler {
     this.now = host.now ?? (() => Date.now())
     this.lastPersonActivityAt = this.now()
     this.load()
-    // Person-activity detection: any agent event whose id is not one of our dispatched sessions.
-    this.disposers.push(this.host.onAgentEvent(payload => {
+    this.disposers.push(this.host.onAgentEvent((payload, event) => {
       const id = payload.agent?.id
-      if (id && !this.sessions.has(id)) this.lastPersonActivityAt = this.now()
+      if (!id) return
+      // Lifecycle for our own dispatched sessions: the handle-level `agent.on` is not available on
+      // every harness release, so completion and errors ride the context-wide event stream.
+      const live = this.sessions.get(id)
+      if (live) {
+        const task = this.tasks.get(live.taskId)
+        if (task && task.state === 'running') {
+          if (event === 'agent/status' && payload.status === 'idle') {
+            task.state = 'done'
+            task.doneReason = `session completed (round ${task.round})`
+            task.endedAt = new Date(this.now()).toISOString()
+            this.endSession(id)
+            this.save()
+          } else if (event === 'agent/error') {
+            task.state = 'failed'
+            task.lastError = String(payload.error ?? 'unknown').slice(0, 300)
+            task.endedAt = new Date(this.now()).toISOString()
+            this.endSession(id)
+            this.save()
+          }
+        }
+        return
+      }
+      // Person-activity detection: any other agent's event refreshes the person clock.
+      this.lastPersonActivityAt = this.now()
     }))
   }
 
@@ -203,27 +226,16 @@ export class IdleScheduler {
       const agent = handle.agent
       const config = this.host.config()
       const runtimeCap = task.maxRuntimeMinutes ?? config.maxRuntimeMinutes
-      live.offs.push(agent.on('agent/status', payload => {
-        const status = (payload as { status?: string })?.status
-        if (status !== 'idle') return
-        task.state = 'done'
-        task.doneReason = `session completed (round ${task.round})`
-        task.endedAt = new Date().toISOString()
-        this.endSession(sessionId)
-        this.save()
-      }))
-      live.offs.push(agent.on('agent/error', payload => {
-        task.state = 'failed'
-        task.lastError = String((payload as { error?: unknown })?.error ?? 'unknown').slice(0, 300)
-        task.endedAt = new Date().toISOString()
-        this.endSession(sessionId)
-        this.save()
-      }))
+      // Completion and errors arrive through the context-wide stream (see the constructor); the only
+      // handle-level control we keep is the hard stop.
       live.timer = setTimeout(() => {
         try { agent.cancel?.({ kind: 'user' }, { keepInbox: true }) } catch { /* already gone */ }
-        task.state = 'stopped'
-        task.doneReason = `hard stop after ${runtimeCap} minutes`
-        task.endedAt = new Date().toISOString()
+        const liveTask = this.tasks.get(live.taskId)
+        if (liveTask && liveTask.state === 'running') {
+          liveTask.state = 'stopped'
+          liveTask.doneReason = `hard stop after ${runtimeCap} minutes`
+          liveTask.endedAt = new Date().toISOString()
+        }
         this.endSession(sessionId)
         this.save()
       }, runtimeCap * 60_000)
