@@ -23,7 +23,7 @@ export interface AgentsRegistry {
   create(spec: { sessionId: string; cwd?: string; meta?: Record<string, unknown> }): Promise<{
     agent: {
       id: string
-      followup(text: string): unknown
+      followup(message: unknown): void
       cancel?(...args: unknown[]): unknown
       on(event: string, handler: (payload: unknown) => void): () => void
     }
@@ -240,7 +240,9 @@ export class IdleScheduler {
         this.save()
       }, runtimeCap * 60_000)
       live.timer.unref?.()
-      void agent.followup(task.prompt)
+      // 0.2.x takes a UserMessage object ({content:[{type:'text',text}], source:{kind:'user'}}),
+      // not a bare string — a bare string silently no-ops.
+      void agent.followup({ content: [{ type: 'text', text: task.prompt }], source: { kind: 'user' } })
     } catch (error) {
       task.state = 'failed'
       task.lastError = String(error instanceof Error ? error.message : error).slice(0, 300)
