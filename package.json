@@ -1,6 +1,6 @@
 {
   "name": "@baymaxhit/dsh-idle",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Idle-time task scheduler for DeepSeek Harness: queue goal-oriented tasks that run autonomously in their own sessions whenever the host is idle — the off-peak 'watchdog' pattern, as a standalone plugin.",
   "license": "MIT",
   "author": "HUHAN-HIT",
