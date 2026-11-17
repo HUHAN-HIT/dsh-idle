@@ -240,9 +240,14 @@ export class IdleScheduler {
         this.save()
       }, runtimeCap * 60_000)
       live.timer.unref?.()
-      // 0.2.x takes a UserMessage object ({content:[{type:'text',text}], source:{kind:'user'}}),
-      // not a bare string — a bare string silently no-ops.
-      void agent.followup({ content: [{ type: 'text', text: task.prompt }], source: { kind: 'user' } })
+      // 0.2.x takes a full UserMessage ({id, role:'user', content:[{type:'text',text}], source}) —
+      // a bare string or a role-less object is silently dropped by the inbox.
+      void agent.followup({
+        id: `idle-${task.id}-r${task.round}`,
+        role: 'user',
+        content: [{ type: 'text', text: task.prompt }],
+        source: { kind: 'user' },
+      })
     } catch (error) {
       task.state = 'failed'
       task.lastError = String(error instanceof Error ? error.message : error).slice(0, 300)
