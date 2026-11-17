@@ -41,6 +41,7 @@ function host(config: Partial<IdleTaskConfig> = {}, dataDir = fs.mkdtempSync(pat
     },
     dataDir,
     config: () => fullConfig,
+    flush: async () => {},
   })
   /** A person agent emits activity at the given clock moment (default: now). */
   const personAct = (at = clock): void => { clock = at; for (const cb of ctxHandlers.get('agent/status') ?? []) cb({ agent: { id: 'person-session' } }) }

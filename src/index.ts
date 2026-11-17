@@ -51,6 +51,7 @@ export function apply(ctx: DshCtx): void {
     },
     dataDir: join(homedir(), '.dsh', 'plugins-data', 'dsh-idle'),
     config: readConfig,
+    flush: session => { const s = (ctx as { sessions?: { flush(x: unknown): Promise<boolean> } }).sessions; return s ? s.flush(session) : Promise.resolve() },
   })
   scheduler.start()
 

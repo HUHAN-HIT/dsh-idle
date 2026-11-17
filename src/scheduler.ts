@@ -72,6 +72,8 @@ export interface IdleSchedulerHost {
   readonly onAgentEvent: (handler: (payload: { agent?: { id?: string }; status?: string; error?: unknown }, event: 'agent/status' | 'agent/error') => void) => () => void
   readonly dataDir: string
   readonly config: () => IdleTaskConfig
+  /** Session persistence flush — the harness acknowledges a followup only after this. */
+  readonly flush: (session: unknown) => Promise<void>
   /** Injectable clock, so tests can drive quiet windows deterministically. */
   readonly now?: () => number
 }
@@ -240,14 +242,18 @@ export class IdleScheduler {
         this.save()
       }, runtimeCap * 60_000)
       live.timer.unref?.()
-      // 0.2.x takes a full UserMessage ({id, role:'user', content:[{type:'text',text}], source}) —
-      // a bare string or a role-less object is silently dropped by the inbox.
-      void agent.followup({
-        id: `idle-${task.id}-r${task.round}`,
-        role: 'user',
+      // Mirror the harness scheduler's own delivery (dsh-schedule send): a dsh-llm-shaped
+      // UserMessage (id + role user), followup, then WAIT for the persistence flush —
+      // without the acknowledgment the turn never materializes and the session idles empty.
+      const message = {
+        id: `idle-${task.id}-r${task.round}-${randomUUID().slice(0, 8)}`,
+        role: 'user' as const,
         content: [{ type: 'text', text: task.prompt }],
-        source: { kind: 'user' },
-      })
+        source: { kind: 'schedule' },
+      }
+      void agent.followup(message)
+      try { await this.host.flush((agent as { session?: unknown }).session) }
+      catch { /* a flush failure must not fail the dispatch */ }
     } catch (error) {
       task.state = 'failed'
       task.lastError = String(error instanceof Error ? error.message : error).slice(0, 300)
